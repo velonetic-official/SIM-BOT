@@ -1,0 +1,71 @@
+meta:
+  robot_name: "demo_agv"
+  drive_model: "Leadshine 2ELD2-CAN7020B"   # 2축 통합형, CANopen CiA301/CiA402
+  status: "SIMULATED"                       # 실장 후 "COMMISSIONED" 로 변경
+
+# -----------------------------------------------------------------------------
+# 1) 차체 기구 제원  (줄자/도면 실측값)
+# -----------------------------------------------------------------------------
+robot:
+  wheel_radius_m:        0.0825   # [SIM] 구동륜 반지름 (165mm 휠 가정)
+  wheel_separation_m:    0.430    # [SIM] 좌우 구동륜 접지점 간 거리(트레드)
+  # 실측 보정 계수: 실제 주행 대비 오도메트리가 벌어질 때만 건드립니다.
+  # (직진 1m 반복주행 → linear, 제자리 10회전 → angular 로 캘리브레이션)
+  calibration:
+    linear_scale:        1.0      # [SIM] 실이동거리 / 오도계산거리
+    angular_scale:       1.0      # [SIM] 실회전각 / 오도계산각
+    wheel_radius_left_ratio:  1.0 # [SIM] 좌우 휠 마모 편차 보정
+
+# -----------------------------------------------------------------------------
+# 2) 드라이브트레인 / 엔코더
+#    ※ counts_per_wheel_rev = encoder_counts_per_motor_rev * gear_ratio
+# -----------------------------------------------------------------------------
+drivetrain:
+  gear_ratio:                     20.0    # [SIM] 감속비 (모터 20회전 = 휠 1회전)
+  encoder_counts_per_motor_rev:   4096    # [SIM] 드라이브가 리포트하는 1회전당 카운트
+                                          #       (체배 포함된 최종 카운트로 적으세요)
+  encoder_counts_are_post_gear:   false   # 엔코더가 감속기 "출력축"에 붙어있으면 true
+
+  left:
+    axis: 1          # 2ELD2 의 축 번호 (1 또는 2)
+    invert_command:  true    # [SIM] 전진 시 부호 반전 필요 여부
+    invert_feedback: true    # [SIM] 피드백 카운트 부호 반전 여부
+  right:
+    axis: 2
+    invert_command:  false   # [SIM]
+    invert_feedback: false   # [SIM]
+
+# -----------------------------------------------------------------------------
+# 3) 한계값 / 안전
+# -----------------------------------------------------------------------------
+limits:
+  max_motor_rpm:        3000.0   # [SIM] 모터 정격 회전수
+  max_linear_mps:        1.20    # [SIM] 차체 최대 직진속도
+  max_angular_rps:       1.50    # [SIM] 차체 최대 선회각속도 (rad/s)
+  max_linear_accel:      0.80    # [SIM] m/s^2  (상위 제어기 슬루레이트)
+  max_angular_accel:     2.00    # [SIM] rad/s^2
+  cmd_timeout_s:         0.50    # 이 시간 동안 cmd_vel 없으면 정지(watchdog)
+
+# -----------------------------------------------------------------------------
+# 4) CAN 노드 / 주기
+# -----------------------------------------------------------------------------
+can:
+  node_id:            1        # [SIM] 드라이브 DIP 스위치로 설정한 노드 ID
+  bitrate:            500000   # [SIM] DIP 스위치 보레이트와 반드시 일치
+  control_period_ms:  20       # 50 Hz 제어 주기 (RPDO 송신 주기)
+  feedback_period_ms: 10       # 드라이브 TPDO 주기.
+                               # ※ 제어주기와 같게 두면 두 주기가 맞물려(beat)
+                               #   오도 속도추정에 톱니 리플이 생깁니다.
+                               #   반드시 제어주기의 1/2 이하로 두세요.
+  odom_velocity_lpf_hz: 5.0    # 카운트 차분 미분에 거는 1차 저역통과 차단주파수
+  heartbeat_ms:       200
+  sync_enable:        false    # SYNC 기반 동기 PDO 사용 여부
+
+# -----------------------------------------------------------------------------
+# 5) 시뮬레이터 전용 (실장 시 무시됨)
+# -----------------------------------------------------------------------------
+simulation:
+  motor_time_constant_s: 0.08   # 속도루프 1차 지연
+  encoder_noise_counts:  1.0    # 카운트 백색잡음 표준편차
+  wheel_slip_ratio:      0.01   # 좌우 미끄러짐(오도 오차 재현용)
+  bus_latency_ms:        1.0

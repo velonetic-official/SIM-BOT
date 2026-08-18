@@ -1,0 +1,132 @@
+# =============================================================================
+#  CANopen 프로파일 매핑  —  Leadshine 2ELD2-CAN (CiA301 / CiA402)
+# =============================================================================
+#  ⚠ 아래 오브젝트 인덱스와 PDO 배치는 CiA402 "표준" 기준으로 채워둔 값입니다.
+#    Leadshine 매뉴얼(오브젝트 딕셔너리 표)을 받으면 이 파일의 숫자만 고치면 됩니다.
+#    코드는 이 YAML 을 해석해서 프레임을 만들기 때문에 소스 수정이 필요 없습니다.
+#  ⚠ 확인 포인트 3가지:
+#      (1) 2축 오브젝트 오프셋 (axis_index_offset) — 보통 0x800
+#      (2) 0x60FF(target velocity) 의 단위 — rpm / counts_per_sec / 0.1rpm
+#      (3) PDO 기본 매핑이 아래와 다르면 sdo_startup 으로 재매핑하거나 표를 수정
+# =============================================================================
+
+profile:
+  name: "cia402_leadshine_2eld2"
+  standard: "CiA402"
+  axis_index_offset: 0x800     # 축2 인덱스 = 축1 인덱스 + 0x800  (예: 0x6040 → 0x6840)
+
+# ---------------------------------------------------------------------------
+# 단위 변환: 드라이브가 요구하는 속도 단위
+#   rpm             → 모터 rpm 그대로
+#   counts_per_sec  → 카운트/초 (counts_per_motor_rev 사용해 환산)
+#   rpm_x10         → 0.1rpm 분해능 정수
+# ---------------------------------------------------------------------------
+units:
+  velocity: rpm
+  velocity_scale: 1.0          # 최종 정수값 = 환산값 * velocity_scale
+  position: counts             # 0x6064 actual position 단위
+
+# ---------------------------------------------------------------------------
+# 오브젝트 딕셔너리 (축1 기준 인덱스)
+# ---------------------------------------------------------------------------
+objects:
+  controlword:        {index: 0x6040, sub: 0x00, type: u16}
+  statusword:         {index: 0x6041, sub: 0x00, type: u16}
+  modes_of_operation: {index: 0x6060, sub: 0x00, type: i8}
+  modes_display:      {index: 0x6061, sub: 0x00, type: i8}
+  target_velocity:    {index: 0x60FF, sub: 0x00, type: i32}
+  actual_velocity:    {index: 0x606C, sub: 0x00, type: i32}
+  actual_position:    {index: 0x6064, sub: 0x00, type: i32}
+  profile_accel:      {index: 0x6083, sub: 0x00, type: u32}
+  profile_decel:      {index: 0x6084, sub: 0x00, type: u32}
+  quick_stop_decel:   {index: 0x6085, sub: 0x00, type: u32}
+  error_code:         {index: 0x603F, sub: 0x00, type: u16}
+
+modes:
+  profile_position: 1
+  profile_velocity: 3
+  profile_torque:   4
+  homing:           6
+
+# ---------------------------------------------------------------------------
+# CiA402 상태머신 컨트롤워드
+# ---------------------------------------------------------------------------
+controlword:
+  shutdown:          0x0006
+  switch_on:         0x0007
+  enable_operation:  0x000F
+  disable_voltage:   0x0000
+  quick_stop:        0x0002
+  fault_reset:       0x0080
+  halt_bit:          0x0100
+
+# statusword 비트마스크 → 상태 판정 (mask, value)
+statusword_states:
+  not_ready_to_switch_on: [0x004F, 0x0000]
+  switch_on_disabled:     [0x004F, 0x0040]
+  ready_to_switch_on:     [0x006F, 0x0021]
+  switched_on:            [0x006F, 0x0023]
+  operation_enabled:      [0x006F, 0x0027]
+  quick_stop_active:      [0x006F, 0x0007]
+  fault_reaction_active:  [0x004F, 0x000F]
+  fault:                  [0x004F, 0x0008]
+
+# ---------------------------------------------------------------------------
+# PDO 매핑 (COB-ID 는 node_id 를 더해 사용)
+#   dir: rx = 마스터→드라이브, tx = 드라이브→마스터
+#   fields 는 바이트 순서대로 little-endian 패킹
+# ---------------------------------------------------------------------------
+pdo:
+  rx:
+    - name: rpdo1_control
+      cob_base: 0x200
+      fields:
+        - {signal: controlword,     axis: 1, type: u16}
+        - {signal: controlword,     axis: 2, type: u16}
+    - name: rpdo2_velocity
+      cob_base: 0x300
+      fields:
+        - {signal: target_velocity, axis: 1, type: i32}
+        - {signal: target_velocity, axis: 2, type: i32}
+  tx:
+    - name: tpdo1_status
+      cob_base: 0x180
+      fields:
+        - {signal: statusword,      axis: 1, type: u16}
+        - {signal: statusword,      axis: 2, type: u16}
+    - name: tpdo2_velocity
+      cob_base: 0x280
+      fields:
+        - {signal: actual_velocity, axis: 1, type: i32}
+        - {signal: actual_velocity, axis: 2, type: i32}
+    - name: tpdo3_position
+      cob_base: 0x380
+      fields:
+        - {signal: actual_position, axis: 1, type: i32}
+        - {signal: actual_position, axis: 2, type: i32}
+
+# ---------------------------------------------------------------------------
+# 기동 시 SDO 시퀀스 (순서대로 실행). axis: 0 = 양축 모두
+#   value 에 "$" 로 시작하면 hardware.yaml 에서 계산된 값을 주입합니다.
+# ---------------------------------------------------------------------------
+sdo_startup:
+  - {desc: "동작모드 = Profile Velocity", signal: modes_of_operation, axis: 0, value: 3}
+  - {desc: "가속 프로파일",               signal: profile_accel,      axis: 0, value: 20000}
+  - {desc: "감속 프로파일",               signal: profile_decel,      axis: 0, value: 20000}
+  - {desc: "급정지 감속",                 signal: quick_stop_decel,   axis: 0, value: 50000}
+
+# 표준 CANopen COB-ID
+cob:
+  nmt:            0x000
+  sync:           0x080
+  emergency_base: 0x080
+  sdo_tx_base:    0x580   # 드라이브 → 마스터 (응답)
+  sdo_rx_base:    0x600   # 마스터 → 드라이브 (요청)
+  heartbeat_base: 0x700
+
+nmt_commands:
+  start:            0x01
+  stop:             0x02
+  pre_operational:  0x80
+  reset_node:       0x81
+  reset_comm:       0x82

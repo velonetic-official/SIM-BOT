@@ -1,0 +1,42 @@
+# =============================================================================
+#  bus.yaml — CAN 물리계층 선택. backend 한 줄만 바꾸면 시뮬↔실물 전환됩니다.
+# =============================================================================
+#   virtual   : 하드웨어 0개. 프로세스 내부 가상 버스 (지금 데모용)
+#   socketcan : Linux + PCAN-USB (peak_usb 커널 드라이버) → can0
+#   vcan      : Linux 가상 CAN 인터페이스 (candump 로 실제 프레임 관찰 가능)
+#   pcan      : Windows + PEAK PCAN-Basic DLL
+# =============================================================================
+
+backend: virtual
+
+profiles:
+  virtual:
+    interface: virtual
+    channel: "candemo"
+    # bitrate 무의미 (소프트웨어 버스)
+
+  socketcan:
+    interface: socketcan
+    channel: "can0"
+    receive_own_messages: false
+    # 사전 준비:
+    #   sudo ip link set can0 type can bitrate 500000
+    #   sudo ip link set up can0
+    #   (PCAN-USB 는 커널 peak_usb 모듈이 자동 인식)
+
+  vcan:
+    interface: socketcan
+    channel: "vcan0"
+    # 사전 준비:
+    #   sudo modprobe vcan
+    #   sudo ip link add dev vcan0 type vcan && sudo ip link set up vcan0
+
+  pcan:
+    interface: pcan
+    channel: "PCAN_USBBUS1"
+    bitrate: 500000
+    # 사전 준비: PEAK PCAN-Basic 드라이버 설치 + `pip install python-can`
+
+trace:
+  enabled: true
+  max_frames: 4000      # 대시보드/CSV 로 남길 최근 프레임 수

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2ELD2-CAN 오도메트리 데모 · CAN 통신 대시보드</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-0: #f6f5f2;
+    --surface-1: #fcfcfb;
+    --surface-2: #efeeea;
+    --border:    #dcdbd5;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #86857f;
+    --series-1: #2a78d6;   /* 좌 휠 */
+    --series-2: #eb6834;   /* 우 휠 */
+    --series-3: #1baf7a;   /* 궤적 */
+    --good:    #008300;
+    --warn:    #eda100;
+    --crit:    #e34948;
+    --grid:    #e6e5e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-0: #111110;
+      --surface-1: #1a1a19;
+      --surface-2: #242422;
+      --border:    #3a3a37;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #8d8c84;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --good: #008300; --warn: #c98500; --crit: #e66767;
+      --grid: #2c2c29;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-0: #111110; --surface-1: #1a1a19; --surface-2: #242422;
+    --border: #3a3a37; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --text-muted: #8d8c84;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --good: #008300; --warn: #c98500; --crit: #e66767; --grid: #2c2c29;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface-0); }
+  .viz-root {
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+          "Malgun Gothic", sans-serif;
+    padding: 24px;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.01em; }
+  h2 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 20px; }
+  .cap { color: var(--text-muted); font-size: 12px; margin: 0 0 12px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > .card { flex: 1 1 340px; margin-bottom: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+           gap: 12px; margin-bottom: 16px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border);
+          border-radius: 10px; padding: 12px 14px; }
+  .tile .k { font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+             letter-spacing: .06em; }
+  .tile .v { font-size: 22px; font-weight: 650; margin-top: 4px;
+             font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .tile .u { font-size: 12px; color: var(--text-secondary); font-weight: 400;
+             margin-left: 3px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px;
+           font-size: 11px; font-weight: 600; border: 1px solid var(--border);
+           background: var(--surface-2); color: var(--text-secondary);
+           vertical-align: middle; }
+  .badge.sim { color: #fff; background: var(--warn); border-color: transparent; }
+  .badge.hw  { color: #fff; background: var(--good); border-color: transparent; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;
+            color: var(--text-secondary); margin: 2px 0 10px; }
+  .legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px;
+              margin-right: 6px; vertical-align: middle; }
+  .legend .dash { height: 0; border-top: 2px dashed currentColor; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th { text-align: left; font-weight: 600; color: var(--text-secondary);
+       border-bottom: 1px solid var(--border); padding: 6px 8px; font-size: 11px;
+       text-transform: uppercase; letter-spacing: .05em; }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--grid);
+       font-variant-numeric: tabular-nums; }
+  td.mono, th.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .scroll { max-height: 320px; overflow: auto; }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+              margin-bottom: 14px; }
+  input[type=range] { flex: 1 1 260px; accent-color: var(--series-1); }
+  button, select { font: inherit; font-size: 13px; padding: 5px 12px;
+    border-radius: 7px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
+  button:hover, select:hover { border-color: var(--text-muted); }
+  .tnow { font-variant-numeric: tabular-nums; color: var(--text-secondary);
+          min-width: 108px; font-size: 13px; }
+  svg { display: block; width: 100%; overflow: visible; }
+  .ax { font-size: 11px; fill: var(--text-muted); }
+  .gl { stroke: var(--grid); stroke-width: 1; }
+  .tip { position: fixed; pointer-events: none; z-index: 20; display: none;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.14); white-space: nowrap; }
+  .tip b { font-weight: 600; }
+  .tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+             margin-right: 6px; }
+  .dl { font-size: 11px; font-weight: 600; }
+  .note { font-size: 12px; color: var(--text-secondary); background: var(--surface-2);
+          border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 0 6px 6px 0;
+          margin-top: 12px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+         background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+    <div>
+      <h1>CAN 오도메트리 데모 <span id="statusBadge" class="badge sim">SIMULATED</span></h1>
+      <p class="sub" id="subline"></p>
+    </div>
+    <button id="themeBtn">다크 모드</button>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="card">
+    <h2>주행 재생</h2>
+    <p class="cap">슬라이더를 움직이면 아래 궤적·속도 차트의 시점 표시가 함께 이동합니다.</p>
+    <div class="controls">
+      <button id="playBtn">▶ 재생</button>
+      <input type="range" id="scrub" min="0" value="0">
+      <span class="tnow" id="tnow">t = 0.00 s</span>
+    </div>
+  </div>
+
+  <div class="row" style="margin-bottom:16px">
+    <div class="card">
+      <h2>오도메트리 궤적 (odom 프레임)</h2>
+      <p class="cap">엔코더 카운트를 적분해 계산한 X–Y 경로. 삼각형이 현재 자세(heading).</p>
+      <svg id="pathSvg" viewBox="0 0 520 420" role="img"
+           aria-label="오도메트리 X-Y 궤적"></svg>
+    </div>
+    <div class="card">
+      <h2>휠 속도 — 지령 대 피드백</h2>
+      <div class="legend">
+        <span style="color:var(--series-1)"><i style="background:currentColor"></i>좌 휠 피드백</span>
+        <span style="color:var(--series-2)"><i style="background:currentColor"></i>우 휠 피드백</span>
+        <span style="color:var(--text-muted)"><i class="dash"></i>지령 (RPDO 송신값)</span>
+      </div>
+      <svg id="rpmSvg" viewBox="0 0 520 200" role="img"
+           aria-label="좌우 휠 rpm 시계열"></svg>
+      <h2 style="margin-top:14px">차체 속도 (v, ω)</h2>
+      <div class="legend">
+        <span style="color:var(--series-1)"><i style="background:currentColor"></i>v [m/s]</span>
+        <span style="color:var(--series-2)"><i style="background:currentColor"></i>ω [rad/s]</span>
+      </div>
+      <svg id="twSvg" viewBox="0 0 520 160" role="img"
+           aria-label="차체 선속도 각속도 시계열"></svg>
+    </div>
+  </div>
+
+  <div class="row" style="margin-bottom:16px">
+    <div class="card">
+      <h2>CAN 프레임 트레이스</h2>
+      <p class="cap">마스터(IPC) 관점의 최근 프레임. TX = IPC→드라이브, RX = 드라이브→IPC.</p>
+      <div class="controls" style="margin-bottom:8px">
+        <select id="traceFilter"><option value="">전체 COB-ID</option></select>
+        <span class="tnow" id="traceCount"></span>
+      </div>
+      <div class="scroll">
+        <table><thead><tr>
+          <th>t[s]</th><th>방향</th><th class="mono">COB-ID</th><th>의미</th>
+          <th>DLC</th><th class="mono">데이터</th>
+        </tr></thead><tbody id="traceBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>하드웨어 제원 (교체 지점)</h2>
+      <p class="cap">실물이 오면 오른쪽 키에 해당하는 <code>config/hardware.yaml</code> 값만
+        바꾸면 됩니다. 코드 수정 불필요.</p>
+      <div class="scroll">
+        <table><thead><tr><th>항목</th><th>현재값</th><th class="mono">YAML 키</th></tr></thead>
+        <tbody id="specBody"></tbody></table>
+      </div>
+      <div class="note" id="specNote"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>주행 샘플 데이터 (표 보기)</h2>
+    <p class="cap">차트와 동일한 데이터입니다. 색만으로 정보를 전달하지 않도록 표를 함께 제공합니다.</p>
+    <div class="scroll">
+      <table><thead><tr>
+        <th>t[s]</th><th>지령 v</th><th>지령 ω</th><th>좌 지령 rpm</th><th>좌 피드백 rpm</th>
+        <th>우 지령 rpm</th><th>우 피드백 rpm</th><th>x[m]</th><th>y[m]</th><th>θ[°]</th>
+      </tr></thead><tbody id="sampleBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const S = DATA.samples, TR = DATA.trace, M = DATA.meta, R = DATA.report;
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const el = (n, a={}) => { const e = document.createElementNS(NS, n);
+  for (const k in a) e.setAttribute(k, a[k]); return e; };
+const fmt = (v, d=2) => Number(v).toFixed(d);
+const css = n => getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(n).trim();
+
+/* ---------------- 헤더 / 타일 ---------------- */
+$("subline").textContent =
+  `${M.drive} · node ${M.node_id} · ${M.bitrate/1000} kbit/s · ${M.bus} · `
+  + `제어 ${M.control_hz} Hz · 프로파일 ${M.profile} (속도단위 ${M.velocity_unit})`;
+const sb = $("statusBadge");
+if (M.status !== "SIMULATED") { sb.textContent = M.status; sb.className = "badge hw"; }
+
+const tiles = [
+  ["주행 시간", fmt(R.duration_s,1), "s"],
+  ["경로 길이", fmt(R.path_length_m,2), "m"],
+  ["최종 X", fmt(R.final_pose.x,3), "m"],
+  ["최종 Y", fmt(R.final_pose.y,3), "m"],
+  ["최종 θ", fmt(R.final_pose.theta_deg,1), "°"],
+  ["CAN 송신", R.can_tx_frames.toLocaleString(), "프레임"],
+  ["CAN 수신", R.can_rx_frames.toLocaleString(), "프레임"],
+];
+$("tiles").innerHTML = tiles.map(([k,v,u]) =>
+  `<div class="tile"><div class="k">${k}</div><div class="v">${v}<span class="u">${u}</span></div></div>`
+).join("");
+
+/* ---------------- 툴팁 ---------------- */
+const tip = $("tip");
+function showTip(evt, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => tip.style.display = "none";
+
+/* ---------------- 궤적 ---------------- */
+const P = { w:520, h:420, m:{t:14,r:16,b:34,l:44} };
+function drawPath(idx) {
+  const svg = $("pathSvg"); svg.innerHTML = "";
+  const xs = S.map(s=>s.x), ys = S.map(s=>s.y);
+  let x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const span = Math.max(x1-x0, y1-y0, 0.5) * 1.18;
+  const cx=(x0+x1)/2, cy=(y0+y1)/2;
+  x0=cx-span/2; x1=cx+span/2; y0=cy-span/2; y1=cy+span/2;
+  const iw = P.w-P.m.l-P.m.r, ih = P.h-P.m.t-P.m.b;
+  const sx = v => P.m.l + (v-x0)/(x1-x0)*iw;
+  const sy = v => P.m.t + ih - (v-y0)/(y1-y0)*ih;
+
+  const step = niceStep(span/5);
+  for (let v=Math.ceil(x0/step)*step; v<=x1; v+=step) {
+    svg.appendChild(el("line",{class:"gl",x1:sx(v),x2:sx(v),y1:P.m.t,y2:P.m.t+ih}));
+    const t=el("text",{class:"ax",x:sx(v),y:P.m.t+ih+16,"text-anchor":"middle"});
+    t.textContent=fmt(v,1); svg.appendChild(t);
+  }
+  for (let v=Math.ceil(y0/step)*step; v<=y1; v+=step) {
+    svg.appendChild(el("line",{class:"gl",x1:P.m.l,x2:P.m.l+iw,y1:sy(v),y2:sy(v)}));
+    const t=el("text",{class:"ax",x:P.m.l-8,y:sy(v)+4,"text-anchor":"end"});
+    t.textContent=fmt(v,1); svg.appendChild(t);
+  }
+  const xl=el("text",{class:"ax",x:P.m.l+iw/2,y:P.h-4,"text-anchor":"middle"});
+  xl.textContent="X [m]"; svg.appendChild(xl);
+  const yl=el("text",{class:"ax",x:12,y:P.m.t+ih/2,"text-anchor":"middle",
+    transform:`rotate(-90 12 ${P.m.t+ih/2})`}); yl.textContent="Y [m]"; svg.appendChild(yl);
+
+  // 이미 지나온 경로 / 남은 경로
+  const d = S.map((s,i)=>`${i?"L":"M"}${sx(s.x).toFixed(1)},${sy(s.y).toFixed(1)}`).join("");
+  svg.appendChild(el("path",{d, fill:"none", stroke:css("--grid"), "stroke-width":4,
+                             "stroke-linejoin":"round"}));
+  const dd = S.slice(0,idx+1).map((s,i)=>`${i?"L":"M"}${sx(s.x).toFixed(1)},${sy(s.y).toFixed(1)}`).join("");
+  svg.appendChild(el("path",{d:dd, fill:"none", stroke:css("--series-3"), "stroke-width":2.5,
+                             "stroke-linecap":"round","stroke-linejoin":"round"}));
+
+  // 시작점 (표면색 링으로 겹침 분리)
+  const s0=S[0];
+  svg.appendChild(el("circle",{cx:sx(s0.x),cy:sy(s0.y),r:6,fill:"none",
+    stroke:css("--surface-1"),"stroke-width":2}));
+  svg.appendChild(el("circle",{cx:sx(s0.x),cy:sy(s0.y),r:4.5,fill:css("--text-muted")}));
+  const st=el("text",{class:"dl",x:sx(s0.x)+9,y:sy(s0.y)-7,fill:css("--text-secondary")});
+  st.textContent="시작"; svg.appendChild(st);
+
+  // 현재 자세 삼각형
+  const c=S[idx], th=c.theta_deg*Math.PI/180;
+  const px=sx(c.x), py=sy(c.y), L=11;
+  const pts=[[px+Math.cos(th)*L, py-Math.sin(th)*L],
+             [px+Math.cos(th+2.5)*L*0.7, py-Math.sin(th+2.5)*L*0.7],
+             [px+Math.cos(th-2.5)*L*0.7, py-Math.sin(th-2.5)*L*0.7]]
+             .map(p=>p.map(v=>v.toFixed(1)).join(",")).join(" ");
+  svg.appendChild(el("polygon",{points:pts, fill:css("--series-3"),
+    stroke:css("--surface-1"), "stroke-width":2, "stroke-linejoin":"round"}));
+  const lt=el("text",{class:"dl",x:px+13,y:py+13,fill:css("--text-primary")});
+  lt.textContent=`(${fmt(c.x,2)}, ${fmt(c.y,2)}) ${fmt(c.theta_deg,0)}°`;
+  svg.appendChild(lt);
+
+  // hover
+  const hit=el("rect",{x:P.m.l,y:P.m.t,width:iw,height:ih,fill:"transparent"});
+  hit.addEventListener("mousemove", e=>{
+    const b=svg.getBoundingClientRect();
+    const mx=(e.clientX-b.left)/b.width*P.w, my=(e.clientY-b.top)/b.height*P.h;
+    let best=0,bd=1e9;
+    S.forEach((s,i)=>{const dx=sx(s.x)-mx,dy=sy(s.y)-my,dist=dx*dx+dy*dy;
+      if(dist<bd){bd=dist;best=i;}});
+    const s=S[best];
+    showTip(e,`<b>t = ${fmt(s.t,2)} s</b><br>
+      <span class="sw" style="background:${css("--series-3")}"></span>
+      x ${fmt(s.x,3)} m · y ${fmt(s.y,3)} m<br>θ ${fmt(s.theta_deg,1)}°`);
+  });
+  hit.addEventListener("mouseleave", hideTip);
+  svg.appendChild(hit);
+}
+function niceStep(raw){const p=Math.pow(10,Math.floor(Math.log10(raw)));const n=raw/p;
+  return (n<1.5?1:n<3?2:n<7?5:10)*p;}
+
+/* ---------------- 시계열 공용 ---------------- */
+function timeChart(svgId, H, series, unit, idx, digits) {
+  const svg=$(svgId); svg.innerHTML="";
+  const W=520, m={t:10,r:58,b:26,l:44}, iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const tmax=S[S.length-1].t||1;
+  let lo=Infinity, hi=-Infinity;
+  series.forEach(se=>S.forEach(s=>{const v=se.get(s); if(v<lo)lo=v; if(v>hi)hi=v;}));
+  if(hi-lo<1e-6){hi=lo+1;lo-=1;}
+  const pad=(hi-lo)*0.12; lo-=pad; hi+=pad;
+  const sx=t=>m.l+t/tmax*iw, sy=v=>m.t+ih-(v-lo)/(hi-lo)*ih;
+
+  const step=niceStep((hi-lo)/4);
+  for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step){
+    svg.appendChild(el("line",{class:"gl",x1:m.l,x2:m.l+iw,y1:sy(v),y2:sy(v)}));
+    const t=el("text",{class:"ax",x:m.l-8,y:sy(v)+4,"text-anchor":"end"});
+    t.textContent=fmt(v,digits); svg.appendChild(t);
+  }
+  const ts=niceStep(tmax/6);
+  for(let v=0; v<=tmax; v+=ts){
+    const t=el("text",{class:"ax",x:sx(v),y:H-6,"text-anchor":"middle"});
+    t.textContent=fmt(v,0); svg.appendChild(t);
+  }
+  if (Math.abs(lo)<1e-9 || (lo<0&&hi>0))
+    svg.appendChild(el("line",{x1:m.l,x2:m.l+iw,y1:sy(0),y2:sy(0),
+      stroke:css("--text-muted"),"stroke-width":1,"stroke-dasharray":"1 3"}));
+  const ul=el("text",{class:"ax",x:m.l,y:m.t-1}); ul.textContent=unit;
+  svg.appendChild(ul);
+
+  series.forEach(se=>{
+    const d=S.map((s,i)=>`${i?"L":"M"}${sx(s.t).toFixed(1)},${sy(se.get(s)).toFixed(1)}`).join("");
+    const a={d,fill:"none",stroke:css(se.color),"stroke-width":se.dash?1.5:2,
+             "stroke-linejoin":"round","stroke-linecap":"round"};
+    if(se.dash){a["stroke-dasharray"]="4 3"; a.opacity=.75;}
+    svg.appendChild(el("path",a));
+  });
+  // 직접 라벨 (색만으로 식별하지 않도록). 겹치면 위아래로 밀어낸다.
+  const last=S[S.length-1];
+  const labels=series.filter(s=>!s.dash)
+    .map(se=>({se, y:sy(se.get(last))})).sort((a,b)=>a.y-b.y);
+  const GAP=13;
+  for(let i=1;i<labels.length;i++)
+    if(labels[i].y-labels[i-1].y<GAP) labels[i].y=labels[i-1].y+GAP;
+  labels.forEach(L=>{
+    const t=el("text",{class:"dl",x:m.l+iw+8,y:L.y+4,fill:css(L.se.color)});
+    t.textContent=L.se.name; svg.appendChild(t);
+    svg.appendChild(el("line",{x1:m.l+iw,x2:m.l+iw+5,y1:sy(L.se.get(last)),y2:L.y,
+      stroke:css(L.se.color),"stroke-width":1,opacity:.5}));
+  });
+
+  // 시점 커서
+  const cur=S[idx];
+  svg.appendChild(el("line",{x1:sx(cur.t),x2:sx(cur.t),y1:m.t,y2:m.t+ih,
+    stroke:css("--text-muted"),"stroke-width":1.5,opacity:.6}));
+  series.filter(s=>!s.dash).forEach(se=>{
+    svg.appendChild(el("circle",{cx:sx(cur.t),cy:sy(se.get(cur)),r:4.5,
+      fill:css(se.color),stroke:css("--surface-1"),"stroke-width":2}));
+  });
+
+  const hit=el("rect",{x:m.l,y:m.t,width:iw,height:ih,fill:"transparent"});
+  hit.addEventListener("mousemove", e=>{
+    const b=svg.getBoundingClientRect();
+    const mx=(e.clientX-b.left)/b.width*W;
+    const t=Math.max(0,Math.min(tmax,(mx-m.l)/iw*tmax));
+    let best=0,bd=1e9; S.forEach((s,i)=>{const d=Math.abs(s.t-t); if(d<bd){bd=d;best=i;}});
+    const s=S[best];
+    showTip(e,`<b>t = ${fmt(s.t,2)} s</b><br>`+series.map(se=>
+      `<span class="sw" style="background:${css(se.color)}"></span>${se.name}: `+
+      `<b>${fmt(se.get(s),digits)}</b> ${unit}`).join("<br>"));
+  });
+  hit.addEventListener("mouseleave", hideTip);
+  svg.appendChild(hit);
+}
+
+const rpmSeries=[
+  {name:"좌 피드백", color:"--series-1", get:s=>s.fb_left_rpm},
+  {name:"우 피드백", color:"--series-2", get:s=>s.fb_right_rpm},
+  {name:"좌 지령",   color:"--series-1", get:s=>s.cmd_left_rpm,  dash:true},
+  {name:"우 지령",   color:"--series-2", get:s=>s.cmd_right_rpm, dash:true},
+];
+const twSeries=[
+  {name:"v", color:"--series-1", get:s=>s.odom_v},
+  {name:"ω", color:"--series-2", get:s=>s.odom_w},
+];
+
+/* ---------------- 트레이스 표 ---------------- */
+const ids=[...new Set(TR.map(f=>f.id))].sort();
+$("traceFilter").insertAdjacentHTML("beforeend",
+  ids.map(i=>`<option value="${i}">${i}</option>`).join(""));
+function renderTrace(){
+  const f=$("traceFilter").value;
+  const rows=TR.filter(r=>!f||r.id===f).slice(-300).reverse();
+  $("traceBody").innerHTML = rows.map(r=>`<tr>
+    <td>${fmt(r.t,3)}</td>
+    <td style="color:${r.dir==="TX"?css("--series-1"):css("--series-2")};font-weight:600">${r.dir}</td>
+    <td class="mono">${r.id}</td><td>${r.label}</td><td>${r.dlc}</td>
+    <td class="mono">${r.data}</td></tr>`).join("");
+  $("traceCount").textContent = `${rows.length} / ${TR.length} 프레임`;
+}
+$("traceFilter").addEventListener("change", renderTrace);
+
+/* ---------------- 제원 표 ---------------- */
+$("specBody").innerHTML = DATA.spec.map(([k,v,y])=>
+  `<tr><td>${k}</td><td><b>${v}</b></td><td class="mono" style="color:var(--text-muted)">${y}</td></tr>`
+).join("");
+$("specNote").innerHTML = M.status==="SIMULATED"
+  ? "현재 <b>임의값(SIMULATED)</b>으로 동작 중입니다. 실물 도착 후 위 YAML 키의 값을 실측/데이터시트로 교체하고 <code>meta.status</code> 를 <code>COMMISSIONED</code> 로 바꾸세요."
+  : "실 하드웨어 제원이 적용된 상태입니다.";
+
+/* ---------------- 샘플 표 ---------------- */
+const stride=Math.max(1, Math.floor(S.length/120));
+$("sampleBody").innerHTML = S.filter((_,i)=>i%stride===0).map(s=>`<tr>
+  <td>${fmt(s.t,2)}</td><td>${fmt(s.cmd_v,2)}</td><td>${fmt(s.cmd_w,2)}</td>
+  <td>${fmt(s.cmd_left_rpm,1)}</td><td>${fmt(s.fb_left_rpm,1)}</td>
+  <td>${fmt(s.cmd_right_rpm,1)}</td><td>${fmt(s.fb_right_rpm,1)}</td>
+  <td>${fmt(s.x,3)}</td><td>${fmt(s.y,3)}</td><td>${fmt(s.theta_deg,1)}</td></tr>`).join("");
+
+/* ---------------- 재생 ---------------- */
+let idx=S.length-1, timer=null;
+const scrub=$("scrub"); scrub.max=S.length-1; scrub.value=idx;
+function render(){
+  drawPath(idx);
+  timeChart("rpmSvg",200,rpmSeries,"rpm",idx,0);
+  timeChart("twSvg",160,twSeries,"m/s · rad/s",idx,2);
+  $("tnow").textContent=`t = ${fmt(S[idx].t,2)} s`;
+}
+scrub.addEventListener("input", ()=>{ idx=+scrub.value; render(); });
+$("playBtn").addEventListener("click", ()=>{
+  if(timer){ clearInterval(timer); timer=null; $("playBtn").textContent="▶ 재생"; return; }
+  if(idx>=S.length-1) idx=0;
+  $("playBtn").textContent="⏸ 일시정지";
+  timer=setInterval(()=>{
+    idx+=2;
+    if(idx>=S.length-1){ idx=S.length-1; clearInterval(timer); timer=null;
+      $("playBtn").textContent="▶ 재생"; }
+    scrub.value=idx; render();
+  }, 30);
+});
+$("themeBtn").addEventListener("click", ()=>{
+  const dark=document.documentElement.getAttribute("data-theme")==="dark";
+  document.documentElement.setAttribute("data-theme", dark?"light":"dark");
+  $("themeBtn").textContent = dark?"다크 모드":"라이트 모드";
+  render(); renderTrace();
+});
+
+renderTrace(); render();
+</script>
+</body>
+</html>
