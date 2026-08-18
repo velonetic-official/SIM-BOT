@@ -1,12 +1,6 @@
-# 2ELD2-CAN 오도메트리 데모 스택
+# 2ELD2-CAN 오도메트리 데모
 
-Leadshine **2ELD2-CAN7020B** (2축 통합 서보 드라이브, CANopen CiA301/CiA402) 를
-IPC ↔ **PEAK PCAN-USB** 로 제어하는 상위 스택입니다.
 
-**지금은 하드웨어가 0개여도 전체 경로가 그대로 돕니다.** 가상 드라이브가 CAN 버스에
-붙어 SDO/PDO/NMT/하트비트에 실제 드라이브처럼 응답하고, 엔코더 카운트를 만들어 보내며,
-그 카운트로 오도메트리가 적분됩니다. 실물이 오면 **`config/hardware.yaml` 의 제원값과
-`config/bus.yaml` 의 backend 한 줄**만 바꾸면 됩니다. 소스 수정은 필요 없습니다.
 
 ```
                      ┌──────────────── 여기만 교체 ────────────────┐
@@ -21,9 +15,6 @@ IPC ↔ **PEAK PCAN-USB** 로 제어하는 상위 스택입니다.
                                                     virtual / socketcan(PCAN-USB) / pcan
 ```
 
----
-
-## 1. 30초 만에 돌려보기 (하드웨어 불필요)
 
 ```bash
 pip install python-can PyYAML
@@ -34,7 +25,6 @@ python3 -m candrive.cli demo --dashboard     # 시나리오 주행 + HTML 대시
 python3 -m pytest                            # 38개 검증 테스트
 ```
 
-산출물
 
 | 파일 | 내용 |
 |---|---|
@@ -42,9 +32,6 @@ python3 -m pytest                            # 38개 검증 테스트
 | `logs/run.csv` | 매 제어주기 샘플 (지령/피드백/카운트/pose) |
 | `logs/can_trace.json` | 마스터 관점 CAN 프레임 덤프 |
 
----
-
-## 2. ROS 2
 
 ```bash
 # 워크스페이스에 심볼릭 링크
@@ -73,11 +60,8 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 | `/reset_odometry` (srv) | `std_srvs/Trigger` | 원점 초기화 |
 | TF | `odom → base_link` | |
 
----
 
-## 3. 하드웨어가 도착하면 — 순서대로
-
-### 3-1. 결선·설정 확인
+### 3-1. 결선·설정
 - 드라이브 **DIP 스위치**: 노드 ID, 보레이트, 종단저항(양 끝단 120Ω 2개).
 - PCAN-USB ↔ 드라이브: CAN_H / CAN_L / GND.
 
@@ -95,7 +79,7 @@ Windows 라면 `backend: pcan` (PEAK PCAN-Basic 드라이버 필요).
 
 ### 3-3. `config/hardware.yaml` — `[SIM]` 태그가 붙은 값 전부 교체
 
-| 값 | 어디서 얻나 |
+| 값 |
 |---|---|
 | `wheel_radius_m` | 하중 실린 상태에서 실측 (무부하 반지름 아님) |
 | `wheel_separation_m` | 좌우 구동륜 **접지점** 간 거리 |
@@ -107,7 +91,7 @@ Windows 라면 `backend: pcan` (PEAK PCAN-Basic 드라이버 필요).
 
 다 바꾸고 `meta.status` 를 `COMMISSIONED` 로 변경.
 
-### 3-4. `config/profiles/cia402_leadshine_2eld2.yaml` — 매뉴얼로 검증할 3가지
+### 3-4. `config/profiles/cia402_leadshine_2eld2.yaml`
 표준 CiA402 기준으로 채워둔 상태입니다. Leadshine 오브젝트 딕셔너리 표를 받으면
 아래만 확인하세요.
 
@@ -161,10 +145,6 @@ dashboard/          단일 파일 HTML 대시보드 생성기
 tests/              기구학·코덱·엔드투엔드 38개 테스트
 ```
 
-**설계 원칙**: 마스터 코드(`drive.py`)는 상대가 실물인지 시뮬인지 전혀 모릅니다.
-`CanLink` 백엔드만 다르고 프레임은 동일합니다. 그래서 지금 검증한 로직이
-그대로 실장에서 돕니다.
-
 ---
 
 ## 5. 두 대 이상 / 실 버스 관찰
@@ -186,13 +166,13 @@ python3 -m candrive.cli --backend vcan drive --v 0.3 --time 10
 
 ---
 
-## 6. 알려진 주의점
+## 6. 주의점
 
-- **`feedback_period_ms` 는 `control_period_ms` 의 절반 이하**여야 합니다. 같으면 두
+- **`feedback_period_ms` 는 `control_period_ms` 의 절반 이하여야 합니다. 같으면 두
   주기가 맞물려 속도 추정에 톱니 리플이 생깁니다. (설정 로더가 검증합니다.)
 - 엔코더 차분 미분에는 `can.odom_velocity_lpf_hz` 저역통과가 걸려 있습니다.
   `/odom` 의 `twist` 는 필터값, CSV 의 `odom_v_raw/odom_w_raw` 는 원시값입니다.
-- 휠 오도메트리는 **미끄러짐을 볼 수 없습니다.** 데모 시뮬은 `wheel_slip_ratio` 로
+- 휠 오도메트리는 미끄러짐을 볼 수 없습니다. 데모 시뮬은 `wheel_slip_ratio` 로
   이 오차를 일부러 재현합니다 (직진 중 θ 가 서서히 도는 게 그 이유). 실장에서
   정밀도가 필요하면 IMU 융합(`robot_localization`)을 추가하세요.
 - `cmd_timeout_s` 워치독: 지령이 끊기면 자동 정지합니다.
