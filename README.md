@@ -169,11 +169,10 @@ python3 -m candrive.cli --backend vcan drive --v 0.3 --time 10
 ## 6. 주의점
 
 - **`feedback_period_ms` 는 `control_period_ms` 의 절반 이하여야 합니다. 같으면 두
-  주기가 맞물려 속도 추정에 톱니 리플이 생깁니다. (설정 로더가 검증합니다.)
-- 엔코더 차분 미분에는 `can.odom_velocity_lpf_hz` 저역통과가 걸려 있습니다.
-  `/odom` 의 `twist` 는 필터값, CSV 의 `odom_v_raw/odom_w_raw` 는 원시값입니다.
+  주기가 맞물려 속도 추정에 톱니 리플이 생깁니다. 
+- 엔코더 차분 미분에는 `can.odom_velocity_lpf_hz` 저역통과
+  `/odom` 의 `twist` 는 필터값, CSV 의 `odom_v_raw/odom_w_raw` 는 원시값
 - 휠 오도메트리는 미끄러짐을 볼 수 없습니다. 데모 시뮬은 `wheel_slip_ratio` 로
-  이 오차를 일부러 재현합니다 (직진 중 θ 가 서서히 도는 게 그 이유). 실장에서
-  정밀도가 필요하면 IMU 융합(`robot_localization`)을 추가하세요.
+  이 오차를 일부러 재현 정밀도가 필요시 IMU 융합(`robot_localization`)을 추가
 - `cmd_timeout_s` 워치독: 지령이 끊기면 자동 정지합니다.
 - STO(Safe Torque Off)·브레이크 출력은 이 스택 범위 밖입니다. 안전회로는 별도 배선.
